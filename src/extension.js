@@ -80,12 +80,15 @@ function activate(context) {
 			_3dsMaxHwnd = window;
 		}
 
+		let tries = 0
 		try {
 			const listener = winapi.get3dsMaxListener(_3dsMaxHwnd);
 
 			// the 3dsmax instance may have been close. Try again and refetch maxWindow
 			if (listener === null) {
-				throw new Error();
+				//throw new Error();
+				vscode.window.showErrorMessage(`${extensionName}: Unable to find listener of 3ds max instance!`);
+				return;
 			}
 
 			winapi.sendMessage(listener, winapi.WM_SETTEXT, 0, cmd);
@@ -94,7 +97,8 @@ function activate(context) {
 		}
 		catch(e) {
 			_3dsMaxHwnd = undefined;
-			await sendCmd();
+			vscode.window.showErrorMessage(`${extensionName}: ${e}`);
+			//await sendCmd();
 			return;
 		}
 	}

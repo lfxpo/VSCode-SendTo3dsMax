@@ -1,45 +1,55 @@
 var exports = module.exports = {};
-var ffi = require('ffi-napi');
-var ref = require('ref-napi');
 
-const maxTitle = "Autodesk 3ds Max";
-const listenerClassName = "MXS_Scintilla";
+const MAX_TITLE = "Autodesk 3ds Max";
+const LISTENER_CLS_NAME = "MXS_Scintilla";
 
-const voidPtr = ref.refType(ref.types.void);
-const stringPtr = ref.refType(ref.types.CString);
+// load koffi and user32
+const koffi = require('koffi');
+const lib = koffi.load('user32.dll');
 
-const user32 = ffi.Library('user32.dll', {
-    EnumWindows: ['bool', [voidPtr, 'int32']],
-    GetWindowTextA : ['long', ['long', stringPtr, 'long']],
-	EnumChildWindows: ['bool', ['long', voidPtr, 'int32']],
-	GetClassNameA : ['long', ['long', stringPtr, 'long']],
-	SendMessageA: ['int32', [ 'long', 'int32', 'long', stringPtr]]
-});
+// define types & aliases
+const HANDLE = koffi.pointer('HANDLE', koffi.opaque());
+koffi.alias('HWND', HANDLE);
+koffi.alias('LPSTR', 'uint8_t*')
+koffi.alias('LPARAM', 'long')
+koffi.alias('WPARAM', 'uint')
+koffi.alias('LRESULT', 'long')
+koffi.alias('UINT', 'uint')
+
+// Create functions & callbacks for window enumeration
+const cEnumWindowsProc = koffi.proto('bool EnumWindowsProc (HWND hwnd, long lParam)');
+const fEnumWindows = lib.func("__stdcall", "EnumWindows", 'bool', [koffi.pointer(cEnumWindowsProc), 'LPARAM'])
+const cEnumChildWindowsProc = koffi.proto('bool EnumChildProc(HWND hwnd, LPARAM lParam)');
+const fEnumChildWindows = lib.func("__stdcall", "EnumChildWindows", 'bool', ['HWND', koffi.pointer(cEnumChildWindowsProc), 'LPARAM'])
+
+// Create other helper functions
+const fGetClassNameA = lib.func("int __stdcall GetClassNameA(HWND hWnd, _Out_ LPSTR lpClassName, int nMaxCount)")
+const fGetWindowTextA = lib.func("int __stdcall GetWindowTextA(HWND hWnd, _Out_ LPSTR lpString, int nMaxCount)")
+const fSendMessageA = lib.func("LRESULT __stdcall SendMessageA(HWND hWnd, UINT Msg, WPARAM wParam, LPSTR lParam)")
 
 
 // return a buffer from a string converted as Cstring
-function makeLPARAM(param) {
-    if (param !== null) {
-        return ref.allocCString(param);
+function makeLPARAM(string) {
+    if (string !== null) {
+        return Buffer.from(string, 'utf-8');
     }
     return null;
 }
 
+// magic numbers for message types
 exports.WM_SETTEXT = 0x000C;
 exports.WM_CHAR = 0x0102;
 exports.VK_RETURN = 0x0D;
 
-exports.get3dsMaxWindowHwnds = function() {
+exports.get3dsMaxWindowHwnds = function () {
     const windowItems = []
-
-    // callback for EnumWindows. It loops against windows and check if the name contains "Autodesk 3ds Max"
-    // eslint-disable-next-line no-unused-vars
-    const windowProc = ffi.Callback('bool', ['long', 'int32'], (hwnd, lParam) => {
-        const buf = Buffer.alloc(255);
-        const ret = user32.GetWindowTextA(hwnd, buf, 255);
+    // build callback for enum func
+    const windowProc = (hwnd, lParam) => {
+        let buf = Buffer.allocUnsafe(255)
+        const ret = fGetWindowTextA(hwnd, buf, buf.length)
         if (ret > 0) {
-            const name = ref.readCString(buf, 0);
-            if(name.includes(maxTitle)) {
+            const name = koffi.decode(buf, 'char', ret)
+            if (name.includes(MAX_TITLE)) {
                 // create a vscode pickable item for showQuickPick
                 const item = {
                     label: name,
@@ -49,9 +59,9 @@ exports.get3dsMaxWindowHwnds = function() {
             }
         }
         return true;
-    });
+    }
 
-    const success = user32.EnumWindows(windowProc, null);
+    const success = fEnumWindows(windowProc, 0)
     if (success && windowItems.length > 0) {
         return windowItems;
     }
@@ -60,25 +70,24 @@ exports.get3dsMaxWindowHwnds = function() {
 }
 
 
-exports.get3dsMaxListener = function(maxHwnd) {
+exports.get3dsMaxListener = function (maxHwnd) {
     const listeners = []
-
-    // callback for EnumChildWindows. It loops against the current 3dsMax child windows and check the class name
-    // eslint-disable-next-line no-unused-vars
-    const enumChildProc = ffi.Callback('bool', ['long', 'int32'], (hwnd, lParam) => {
-        const buf = Buffer.alloc(255);
-        const ret = user32.GetClassNameA(hwnd, buf, 255);
+    // build callback for enum func
+    const enumChildProc = (hwnd, lParam) => {
+        let buf = Buffer.allocUnsafe(255)
+        const ret = fGetClassNameA(hwnd, buf, buf.length)
         if (ret > 0) {
-            const childClassName = ref.readCString(buf, 0);
-            if(childClassName.includes(listenerClassName)) {
-                listeners.push(hwnd)
+            const childClassName = koffi.decode(buf, 'char', ret)
+            if (childClassName.includes(LISTENER_CLS_NAME)) {
+                listeners.push(hwnd);
             }
         }
-        return true;
-    });
+        return true
+    }
 
     // we are only interested in the first result
-    const success = user32.EnumChildWindows(maxHwnd, enumChildProc, null);
+    //const success = user32.EnumChildWindows(maxHwnd, enumChildProc, null);
+    const success = fEnumChildWindows(maxHwnd, enumChildProc, 0)
     if (success && listeners.length > 0) {
         return listeners[0];
     }
@@ -87,6 +96,10 @@ exports.get3dsMaxListener = function(maxHwnd) {
 }
 
 
-exports.sendMessage = function(hwnd, msg, wparam, lparam) {
-    user32.SendMessageA(hwnd, msg, wparam, makeLPARAM(lparam));
+exports.sendMessageA = function (hwnd, msg, wparam, lparam) {
+    fSendMessageA(hwnd, msg, wparam, lparam)
+}
+
+exports.sendMessage = function (hwnd, msg, wparam, text) {
+    fSendMessageA(hwnd, msg, wparam, makeLPARAM(text))
 }

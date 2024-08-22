@@ -86,7 +86,7 @@
     "typescript": "^4.8.4"
   },
   "dependencies": {
-    "ffi-napi": "^4.0.3",
+    "koffi": "^2.9.0",
     "unique-filename": "^3.0.0"
   }
 }
