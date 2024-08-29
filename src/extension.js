@@ -11,11 +11,13 @@ const temp_files = {}
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
+	vscode.window.showInformationMessage("Starting Extension!")
+
 	// lazy imports
 	const winapi = require('./winapi');
 	const path = require('path');
 	const uniqueFilename = require('unique-filename')
-	
+
 	// constants
 	const extensionName = "Send to 3dsMax";
 	const notSupported = "File type not supported, must be of: *.ms, *.mcr, *.py";
@@ -24,18 +26,20 @@ function activate(context) {
 
 	// current 3dsMax instance hwnd
 	let _3dsMaxHwnd = undefined;
+	let _3dsMaxLabel = undefined
 
 	// get the current configuration values for given keys
 	function getConfigValues(keys) {
 		const values = []
 		const config = vscode.workspace.getConfiguration("send-to-3dsmax");
-		for (var key of keys){
+		for (var key of keys) {
 			values.push(config[key])
 		}
 		return values
 	}
 
 	// get the appropriate command to send to 3dsMax based on the file extension
+	// either fileIn or python.executeFile
 	function getCmdFromFile(file) {
 		const ext = path.extname(file);
 		if ([".ms", ".mcr"].includes(ext)) {
@@ -48,39 +52,41 @@ function activate(context) {
 	}
 
 	// define the current 3dsMax instance to use 
-	async function get3dsMaxWindowHwnd() {
-		const windows = winapi.get3dsMaxWindowHwnds();
+	// @return { label, hwnd }
+	async function get3dsMaxWindow() {
+		const windows = winapi.get3dsMaxWindows();
+		const nullReturn = { label: "NULL", hwnd: null }
 		if (windows === null) {
-			vscode.window.showInformationMessage(`${extensionName}: No instance found`);
-			return null;
+			vscode.window.showInformationMessage(`${extensionName}: No open 3dsMax instances found`);
+			return nullReturn;
 		}
 
 		if (windows.length > 1) {
 			const pickedWindow = await vscode.window.showQuickPick(windows, { placeHolder: 'Select a 3dsMax instance' });
 			if (pickedWindow === undefined) {
 				vscode.window.showInformationMessage(`${extensionName}: No instance selected`);
-				return;
+				return nullReturn;
 			}
-			vscode.window.showInformationMessage(`${extensionName}: selected "${pickedWindow.label}"`);
-			return pickedWindow.hwnd;
+			vscode.window.showInformationMessage(`${extensionName}: Selected "${pickedWindow.label}"`);
+			return pickedWindow;
 		}
 
-		return windows[0].hwnd;
+		return windows[0];
 	}
 
 	// try to send the given command to the current 3dsMax instance
 	async function sendCmd(cmd) {
 		// make sure we have a 3dsmax instance selected
 		if (_3dsMaxHwnd === undefined) {
-			const window = await get3dsMaxWindowHwnd();
-			if (window === null) {
+			const window = await get3dsMaxWindow();
+			if (!window || window.hwnd === null) {
 				return;
 			}
 
-			_3dsMaxHwnd = window;
+			_3dsMaxHwnd = window.hwnd;
+			_3dsMaxLabel = window.label
 		}
 
-		let tries = 0
 		try {
 			const listener = winapi.get3dsMaxListener(_3dsMaxHwnd);
 
@@ -95,12 +101,13 @@ function activate(context) {
 			winapi.sendMessage(listener, winapi.WM_CHAR, winapi.VK_RETURN, null);
 
 		}
-		catch(e) {
+		catch (e) {
 			_3dsMaxHwnd = undefined;
 			vscode.window.showErrorMessage(`${extensionName}: ${e}`);
 			//await sendCmd();
 			return;
 		}
+		vscode.window.showInformationMessage(`${extensionName}: Sent to ${_3dsMaxLabel ?? 'NULL'}`);
 	}
 
 	// create and return a temporary file based on the document language
@@ -114,7 +121,7 @@ function activate(context) {
 		// TODO: cache chosen language for a given document ?
 		if (!(isMxs || isPy)) {
 			const pickedLang = await vscode.window.showQuickPick(
-				['Maxscript', 'Python'], 
+				['Maxscript', 'Python'],
 				{ title: 'Select Language' }
 			);
 			if (pickedLang === undefined) {
@@ -131,7 +138,7 @@ function activate(context) {
 		let filename = undefined
 		let data = undefined
 		if (isMxs) {
-			if(!('mxs' in temp_files)) {
+			if (!('mxs' in temp_files)) {
 				filename = `${uniqueFilename(tmpdir, 'vsc-send-to-max')}.ms`;
 				temp_files['mxs'] = filename;
 			}
@@ -145,7 +152,7 @@ function activate(context) {
 			data = forceLocalConfig ? `(\n${doc.getText(range)}\n)` : doc.getText(range);
 		}
 		else if (isPy) {
-			if(!('py' in temp_files)) {
+			if (!('py' in temp_files)) {
 				filename = `${uniqueFilename(tmpdir, 'vsc-send-to-max')}.py`;
 				temp_files['py'] = filename;
 			}
@@ -155,10 +162,10 @@ function activate(context) {
 
 			data = doc.getText(range);
 		}
-		
+
 		// check if we need to create the temp folder
 		// write the temp file to disk
-		try {fs.mkdirSync(tmpdir); } catch (e) {}
+		try { fs.mkdirSync(tmpdir); } catch (e) { }
 		fs.writeFileSync(filename, data);
 
 		return filename;
@@ -185,23 +192,23 @@ function activate(context) {
 
 
 	let selectInstanceCommand = vscode.commands.registerCommand('send-to-3dsmax.select', async () => {
-		const hwnd = await get3dsMaxWindowHwnd();
+		const hwnd = await get3dsMaxWindow().hwnd;
 		if (hwnd !== null) {
 			_3dsMaxHwnd = hwnd;
 		}
 	});
 
 	let sendCommand = vscode.commands.registerCommand('send-to-3dsmax.send', async () => {
-		if(vscode.window.activeTextEditor !== undefined) {
+		if (vscode.window.activeTextEditor !== undefined) {
 			const doc = vscode.window.activeTextEditor.document;
 			let file = undefined;
 
 			// create a temp file if the current file isn't save
-			if(doc.isUntitled) {
+			if (doc.isUntitled) {
 				file = await getTempFile(doc)
 			}
 			// save dirty file
-			else if(doc.isDirty) {
+			else if (doc.isDirty) {
 				const useTempfile = getConfigValues(['useTempForDirtyFile'])[0];
 				if (useTempfile) {
 					file = await getTempFile(doc)
@@ -230,7 +237,7 @@ function activate(context) {
 
 	let sendSelectionCommand = vscode.commands.registerCommand('send-to-3dsmax.send-selection', async () => {
 		const editor = vscode.window.activeTextEditor;
-		if(editor !== undefined) {
+		if (editor !== undefined) {
 			const extendSelection = getConfigValues(['extendSelection'])[0];
 			let range = undefined;
 			if (extendSelection) {
@@ -265,7 +272,7 @@ function activate(context) {
 
 // Delete temporary files when the extension is deactivated
 function deactivate() {
-	for (var key in temp_files){
+	for (var key in temp_files) {
 		fs.unlinkSync(temp_files[key]);
 	}
 }

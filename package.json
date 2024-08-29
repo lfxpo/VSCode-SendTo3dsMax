@@ -1,17 +1,17 @@
 {
   "name": "send-to-3dsmax",
-  "displayName": "Send to 3dsMax",
-  "description": "Execute Maxscript and Python in 3dsMax",
+  "displayName": "Send to 3dsMax (Fixed)",
+  "description": "Execute Maxscript and Python in 3dsMax on windows",
   "publisher": "ClementPlantec",
   "icon": "SendTo3dsMax.png",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Sugz/VSCode-SendTo3dsMax"
+    "url": "https://github.com/lfxpo/VSCode-SendTo3dsMax"
   },
-  "homepage": "https://github.com/Sugz/VSCode-SendTo3dsMax",
+  "homepage": "https://github.com/lfxpo/VSCode-SendTo3dsMax",
   "engines": {
-    "vscode": "^1.74.0"
+    "vscode": "^1.8.0"
   },
   "categories": [
     "Other"
@@ -75,15 +75,16 @@
     "test": "node ./test/runTest.js"
   },
   "devDependencies": {
-    "@types/glob": "^8.0.0",
-    "@types/mocha": "^10.0.0",
-    "@types/node": "16.x",
-    "@types/vscode": "^1.74.0",
-    "@vscode/test-electron": "^2.2.0",
-    "eslint": "^8.26.0",
-    "glob": "^8.0.3",
-    "mocha": "^10.1.0",
-    "typescript": "^4.8.4"
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.7",
+    "@types/node": "^22.5.1",
+    "@types/vscode": "^1.92.0",
+    "@vscode/test-electron": "^2.4.1",
+    "eslint": "^9.9.1",
+    "glob": "^11.0.0",
+    "globals": "^15.9.0",
+    "mocha": "^10.7.3",
+    "typescript": "^4.9.5"
   },
   "dependencies": {
     "koffi": "^2.9.0",

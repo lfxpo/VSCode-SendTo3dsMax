@@ -41,7 +41,7 @@ exports.WM_SETTEXT = 0x000C;
 exports.WM_CHAR = 0x0102;
 exports.VK_RETURN = 0x0D;
 
-exports.get3dsMaxWindowHwnds = function () {
+exports.get3dsMaxWindows = function () {
     const windowItems = []
     // build callback for enum func
     const windowProc = (hwnd, lParam) => {
