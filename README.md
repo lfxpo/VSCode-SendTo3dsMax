@@ -24,3 +24,4 @@ There is two differents commands:
 ## Current Release
 
 [0.1.5] - 2022-12-12 - [See changelog](https://github.com/Sugz/VSCode-SendTo3dsMax/blob/main/CHANGELOG.md)
+[0.1.6] - 2024-08-29 - Update packages & modernize to work with latest versions of VSCode 
